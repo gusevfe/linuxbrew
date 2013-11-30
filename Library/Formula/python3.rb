@@ -39,15 +39,6 @@ class Python3 < Formula
     DATA if build.with? 'brewed-tk'
   end
 
-  def site_packages_cellar
-    prefix/"Frameworks/Python.framework/Versions/#{VER}/lib/python#{VER}/site-packages"
-  end
-
-  # The HOMEBREW_PREFIX location of site-packages.
-  def site_packages
-    HOMEBREW_PREFIX/"lib/python#{VER}/site-packages"
-  end
-
   fails_with :llvm do
     build '2336'
     cause <<-EOS.undent
@@ -60,6 +51,15 @@ class Python3 < Formula
       make: *** [pybuilddir.txt] Segmentation fault: 11
     EOS
   end
+  #
+  # The HOMEBREW_PREFIX location of site-packages.
+  def site_packages
+    HOMEBREW_PREFIX/"lib/python2.7/site-packages"
+  end
+
+  def site_packages_cellar
+    prefix/"lib/python3.3/site-packages"
+  end
 
   def install
     # Unset these so that installing pip and setuptools puts them where we want
@@ -71,8 +71,7 @@ class Python3 < Formula
       --prefix=#{prefix}
       --enable-ipv6
       --datarootdir=#{share}
-      --datadir=#{share}
-      --enable-framework=#{prefix}/Frameworks]
+      --datadir=#{share}]
 
     args << '--without-gcc' if ENV.compiler == :clang
 
@@ -95,7 +94,6 @@ class Python3 < Formula
     # `brew install enchant && pip install pyenchant`
     inreplace "./Lib/ctypes/macholib/dyld.py" do |f|
       f.gsub! 'DEFAULT_LIBRARY_FALLBACK = [', "DEFAULT_LIBRARY_FALLBACK = [ '#{HOMEBREW_PREFIX}/lib',"
-      f.gsub! 'DEFAULT_FRAMEWORK_FALLBACK = [', "DEFAULT_FRAMEWORK_FALLBACK = [ '#{HOMEBREW_PREFIX}/Frameworks',"
     end
 
     if build.with? 'brewed-tk'
@@ -108,31 +106,15 @@ class Python3 < Formula
     system "make"
 
     ENV.deparallelize # Installs must be serialized
-    # Tell Python not to install into /Applications (default for framework builds)
-    system "make", "install", "PYTHONAPPSDIR=#{prefix}"
-    # Demos and Tools
-    (HOMEBREW_PREFIX/'share/python3').mkpath
-    system "make", "frameworkinstallextras", "PYTHONAPPSDIR=#{share}/python3"
+    system "make", "install"
     system "make", "quicktest" if build.include? "quicktest"
-
-    # Any .app get a " 3" attached, so it does not conflict with python 2.x.
-    Dir.glob(prefix/"*.app").each do |app|
-      mv app, app.gsub(".app", " 3.app")
-    end
-
-    # Post-install, fix up the site-packages so that user-installed Python
-    # software survives minor updates, such as going from 3.3.2 to 3.3.3:
-
+     
     # Remove the site-packages that Python created in its Cellar.
     site_packages_cellar.rmtree
-    # Create a site-packages in HOMEBREW_PREFIX/lib/python#{VER}/site-packages
+    # Create a site-packages in HOMEBREW_PREFIX/lib/python2.7/site-packages
     site_packages.mkpath
     # Symlink the prefix site-packages into the cellar.
     ln_s site_packages, site_packages_cellar
-
-    # "python3" executable is forgotten for framework builds.
-    # Make sure homebrew symlinks it to HOMEBREW_PREFIX/bin.
-    ln_s "#{bin}/python#{VER}", "#{bin}/python3" unless (bin/"python3").exist?
 
     # We ship setuptools and pip and reuse the PythonDependency
     # Requirement here to write the sitecustomize.py
@@ -148,16 +130,18 @@ class Python3 < Formula
     rm_rf Dir["#{py.global_site_packages}/distribute*"]
 
     setup_args = [ "-s", "setup.py", "install", "--force", "--verbose",
-                   "--install-scripts=#{bin}", "--install-lib=#{site_packages}" ]
+                   "--install-scripts=#{bin}"]
 
     resource('setuptools').stage { system py.binary, *setup_args }
-    mv bin/'easy_install', bin/'easy_install3'
 
     resource('pip').stage { system py.binary, *setup_args }
-    mv bin/'pip', bin/'pip3'
+        mv bin/'pip', bin/'pip3'
 
     # And now we write the distutils.cfg
-    cfg = prefix/"Frameworks/Python.framework/Versions/#{VER}/lib/python#{VER}/distutils/distutils.cfg"
+    # /data/results/gusev/software/linuxbrew/
+    # 
+    # Cellar/python3/3.3.3/lib/python3.3/distutils
+    cfg = prefix/"lib/python#{VER}/distutils/distutils.cfg"
     cfg.delete if cfg.exist?
     cfg.write <<-EOF.undent
       [global]
@@ -165,12 +149,6 @@ class Python3 < Formula
       [install]
       prefix=#{HOMEBREW_PREFIX}
     EOF
-
-    # A fix, because python and python3 both want to install Python.framework
-    # and therefore we can't link both into HOMEBREW_PREFIX/Frameworks
-    # https://github.com/mxcl/homebrew/issues/15943
-    ["Headers", "Python", "Resources"].each{ |f| rm(prefix/"Frameworks/Python.framework/#{f}") }
-    rm prefix/"Frameworks/Python.framework/Versions/Current"
   end
 
   def distutils_fix_superenv(args)
@@ -184,9 +162,6 @@ class Python3 < Formula
       ldflags += " -isysroot #{MacOS.sdk_path}"
       # Same zlib.h-not-found-bug as in env :std (see below)
       args << "CPPFLAGS=-I#{MacOS.sdk_path}/usr/include"
-      unless build.with? 'brewed-tk'
-        cflags += " -I#{MacOS.sdk_path}/System/Library/Frameworks/Tk.framework/Versions/8.5/Headers"
-      end
     end
     args << cflags
     args << ldflags
@@ -229,14 +204,8 @@ class Python3 < Formula
         pip3 install --upgrade setuptools
         pip3 install --upgrade pip
 
-      To symlink "Idle 3" and the "Python Launcher 3" to ~/Applications
-        `brew linkapps`
-
       You can install Python packages with
         `pip3 install <your_favorite_package>`
-
-      They will install into the site-package directory
-        #{site_packages}
 
       See: https://github.com/mxcl/homebrew/wiki/Homebrew-and-Python
     EOS
