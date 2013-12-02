@@ -15,7 +15,7 @@ class Bbcp < Formula
     mkdir "obj"
 
     cd "src" do
-      system "make", "Darwin"
+      system "make", "makeLinuxx86_64"
     end
 
     bin.install "bin/bbcp"
