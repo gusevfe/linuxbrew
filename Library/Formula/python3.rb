@@ -54,7 +54,7 @@ class Python3 < Formula
   #
   # The HOMEBREW_PREFIX location of site-packages.
   def site_packages
-    HOMEBREW_PREFIX/"lib/python2.7/site-packages"
+    HOMEBREW_PREFIX/"lib/python3.3/site-packages"
   end
 
   def site_packages_cellar

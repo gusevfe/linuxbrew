@@ -44,13 +44,13 @@ class Python < Formula
     p
   end
 
-  def site_packages_cellar
-    prefix/"Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages"
-  end
-
-  # The HOMEBREW_PREFIX location of site-packages.
+# The HOMEBREW_PREFIX location of site-packages.
   def site_packages
     HOMEBREW_PREFIX/"lib/python2.7/site-packages"
+  end
+
+  def site_packages_cellar
+    prefix/"lib/python2.7/site-packages"
   end
 
   def install
@@ -66,7 +66,6 @@ class Python < Formula
              --enable-ipv6
              --datarootdir=#{share}
              --datadir=#{share}
-             --enable-framework=#{prefix}/Frameworks
            ]
 
     args << '--without-gcc' if ENV.compiler == :clang
@@ -91,7 +90,6 @@ class Python < Formula
     # `brew install enchant && pip install pyenchant`
     inreplace "./Lib/ctypes/macholib/dyld.py" do |f|
       f.gsub! 'DEFAULT_LIBRARY_FALLBACK = [', "DEFAULT_LIBRARY_FALLBACK = [ '#{HOMEBREW_PREFIX}/lib',"
-      f.gsub! 'DEFAULT_FRAMEWORK_FALLBACK = [', "DEFAULT_FRAMEWORK_FALLBACK = [ '#{HOMEBREW_PREFIX}/Frameworks',"
     end
 
     if build.with? 'brewed-tk'
@@ -101,18 +99,10 @@ class Python < Formula
 
     system "./configure", *args
 
-    # HAVE_POLL is "broken" on OS X
-    # See: http://trac.macports.org/ticket/18376 and http://bugs.python.org/issue5154
-    inreplace 'pyconfig.h', /.*?(HAVE_POLL[_A-Z]*).*/, '#undef \1' unless build.with? "poll"
-
     system "make"
 
     ENV.deparallelize # Installs must be serialized
-    # Tell Python not to install into /Applications (default for framework builds)
-    system "make", "install", "PYTHONAPPSDIR=#{prefix}"
-    # Demos and Tools
-    (HOMEBREW_PREFIX/'share/python').mkpath
-    system "make", "frameworkinstallextras", "PYTHONAPPSDIR=#{share}/python"
+    system "make", "install"
     system "make", "quicktest" if build.include? 'quicktest'
 
     # Post-install, fix up the site-packages so that user-installed Python
@@ -145,7 +135,7 @@ class Python < Formula
     resource('pip').stage { system py.binary, *setup_args }
 
     # And now we write the distutils.cfg
-    cfg = prefix/"Frameworks/Python.framework/Versions/2.7/lib/python2.7/distutils/distutils.cfg"
+    cfg = prefix/"lib/python2.7/distutils/distutils.cfg"
     cfg.delete if cfg.exist?
     cfg.write <<-EOF.undent
       [global]
@@ -156,7 +146,7 @@ class Python < Formula
     EOF
 
     # Work-around for that bug: http://bugs.python.org/issue18050
-    inreplace "#{prefix}/Frameworks/Python.framework/Versions/2.7/lib/python2.7/re.py", 'import sys', <<-EOS.undent
+    inreplace "#{prefix}/lib/python2.7/re.py", 'import sys', <<-EOS.undent
       import sys
       try:
           from _sre import MAXREPEAT
@@ -168,7 +158,7 @@ class Python < Formula
       # Fixes setting Python build flags for certain software
       # See: https://github.com/mxcl/homebrew/pull/20182
       # http://bugs.python.org/issue3588
-      inreplace "#{prefix}/Frameworks/Python.framework/Versions/2.7/lib/python2.7/config/Makefile" do |s|
+      inreplace "#{prefix}/lib/python2.7/config/Makefile" do |s|
         s.change_make_var! "LINKFORSHARED",
           "-u _PyMac_Error $(PYTHONFRAMEWORKINSTALLDIR)/Versions/$(VERSION)/$(PYTHONFRAMEWORK)"
       end
